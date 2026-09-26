@@ -1,0 +1,533 @@
+import io
+import random
+from datetime import datetime, timedelta
+import matplotlib
+matplotlib.use("Agg")  # Bezpečný backend pro Streamlit
+import matplotlib.pyplot as plt
+import pandas as pd
+import streamlit as st
+
+st.set_page_config(page_title="Divadelní Aplikace", layout="wide")
+
+# --- KONSTANTY A DATA ---
+DEFAULT_PAUZA_MINUT: int = 15
+POCET_SLOUPCU_MRIZKY: int = 4
+
+VSECHNA_PREDSTAVENI: list[str] = [
+    "Hamlet", "Romeo a Julie", "R.U.R.", "Bílá nemoc", "Na samotě u lesa",
+    "Othello", "Macbeth", "Král Lear", "Višňový sad", "Revizor",
+    "Zkrocení zlé ženy", "Cyrano z Bergeracu", "Lakomec", "Pygmalion",
+    "Maryša", "Lucerna", "Fidlovačka", "Radúz a Mahulena",
+    "Kytice", "Noc na Karlštejně", "Dvanáct rozhněvaných mužů", "Čekání na Godota"
+]
+
+PREDSTAVENI_HEREC: list[str] = VSECHNA_PREDSTAVENI
+
+KATEGORIE_POROTCE: list[str] = [
+    "Nejlepší hlavní herecký výkon",
+    "Nejlepší vedlejší role",
+    "Scénografie a kostýmy",
+    "Režie a celkový dojem",
+    "Dramaturgie",
+]
+
+POVINNA_PREDSTAVENI_POROTCE: dict[str, list[str]] = {
+    "Nejlepší hlavní herecký výkon": ["Hamlet", "Cyrano z Bergeracu", "Maryša", "Macbeth"],
+    "Nejlepší vedlejší role": ["Romeo a Julie", "Revizor", "Radúz a Mahulena"],
+    "Scénografie a kostýmy": ["R.U.R.", "Lucerna", "Noc na Karlštejně", "Kytice"],
+    "Režie a celkový dojem": ["Bílá nemoc", "Višňový sad", "Čekání na Godota", "Dvanáct rozhněvaných mužů"],
+    "Dramaturgie": ["Na samotě u lesa", "Lakomec", "Pygmalion", "Fidlovačka", "Král Lear"],
+}
+
+MISTNOSTI: list[str] = [
+    "Hlavní scéna", "Komorní sál", "Divadelní klub", 
+    "Sál pod střechou", "Zkušebna A", "Experimentální prostor"
+]
+
+
+# ==========================================
+# POMOCNÉ FUNKCE PRO EXPORT
+# ==========================================
+def vytvor_graficky_rozvrh(rozvrh_data: list[dict], format_souboru: str = "pdf") -> bytes:
+    """
+    Vygeneruje čistou tabulku rozvrhu jako PDF nebo obrázek (PNG) pomocí Matplotlibu.
+    """
+    df = pd.DataFrame(rozvrh_data)
+    vyska = max(2.5, len(df) * 0.45 + 1.2)
+    fig, ax = plt.subplots(figsize=(10, vyska))
+    ax.axis("off")
+    ax.axis("tight")
+
+    tabulka = ax.table(
+        cellText=df.values,
+        colLabels=df.columns,
+        loc="center",
+        cellLoc="center"
+    )
+    tabulka.auto_set_font_size(False)
+    tabulka.set_fontsize(10)
+    tabulka.scale(1.15, 1.7)
+
+    for (row, col), bunka in tabulka.get_celld().items():
+        if row == 0:
+            bunka.set_text_props(weight="bold", color="white")
+            bunka.set_facecolor("#1E3D59")
+        else:
+            bunka.set_facecolor("#F7F9FB" if row % 2 == 0 else "#FFFFFF")
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format=format_souboru, bbox_inches="tight", dpi=200)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def vykresli_tlacitka_exportu(rozvrh_data: list[dict], prefix_souboru: str):
+    """
+    Zobrazí dvě vyrovnaná tlačítka pro stažení do PDF a PNG.
+    """
+    if not rozvrh_data:
+        return
+
+    st.write("#### Možnosti exportu")
+    col_pdf, col_png = st.columns(2)
+
+    with col_pdf:
+        pdf_bytes = vytvor_graficky_rozvrh(rozvrh_data, "pdf")
+        st.download_button(
+            label="📄 Stáhnout jako PDF",
+            data=pdf_bytes,
+            file_name=f"{prefix_souboru}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+
+    with col_png:
+        png_bytes = vytvor_graficky_rozvrh(rozvrh_data, "png")
+        st.download_button(
+            label="🖼️ Stáhnout jako Obrázek (PNG)",
+            data=png_bytes,
+            file_name=f"{prefix_souboru}.png",
+            mime="image/png",
+            use_container_width=True
+        )
+
+
+# ==========================================
+# FUNKCE f1, f2, f3
+# ==========================================
+def f1(vybrana_predstaveni: list[str], cas_mezi_predstavenimi: int):
+    """
+    Validace rozvrhu: vrací None, pokud kombinaci nelze stihnout.
+    Demo pravidlo: více než 6 představení vyvolá varování.
+    """
+    if len(vybrana_predstaveni) > 6:
+        return None
+    return "OK"
+
+
+def f2(
+    predstaveni_herce: str | None,
+    okruh_hodnoceni_porotcem: str | None,
+    list_toggled_on_predstaveni: list[str],
+    cas_na_presun: int
+) -> list[dict]:
+    rozvrh: list[dict] = []
+    aktualni_cas = datetime.strptime("10:00", "%H:%M")
+
+    for hra in list_toggled_on_predstaveni:
+        delka_minut = random.choice([45, 60, 75, 90])
+        cas_zacatku = aktualni_cas
+        cas_konce = cas_zacatku + timedelta(minutes=delka_minut)
+        mistnost = random.choice(MISTNOSTI)
+
+        rozvrh.append({
+            "Představení": hra,
+            "Místnost": mistnost,
+            "Čas začátku": cas_zacatku.strftime("%H:%M"),
+            "Čas konce": cas_konce.strftime("%H:%M"),
+            "Délka": f"{delka_minut} min"
+        })
+
+        aktualni_cas = cas_konce + timedelta(minutes=cas_na_presun)
+
+    return rozvrh
+
+
+def f3(
+    prioritni_predstaveni: list[str],
+    cas_na_prechod: int,
+    vsechna_predstaveni: list[str]
+) -> list[dict]:
+    rozvrh = f2(
+        predstaveni_herce=None,
+        okruh_hodnoceni_porotcem=None,
+        list_toggled_on_predstaveni=prioritni_predstaveni,
+        cas_na_presun=cas_na_prechod
+    )
+
+    if rozvrh:
+        posledni_konec = datetime.strptime(rozvrh[-1]["Čas konce"], "%H:%M")
+        cas_zacatku = posledni_konec + timedelta(minutes=cas_na_prechod)
+    else:
+        cas_zacatku = datetime.strptime("10:00", "%H:%M")
+
+    cas_konce = cas_zacatku + timedelta(minutes=30)
+
+    rozvrh.append({
+        "Představení": "🏛️ Proslov starosty",
+        "Místnost": "Hlavní scéna (Slavnostní sál)",
+        "Čas začátku": cas_zacatku.strftime("%H:%M"),
+        "Čas konce": cas_konce.strftime("%H:%M"),
+        "Délka": "30 min"
+    })
+
+    return rozvrh
+
+
+# --- STAV APLIKACE ---
+if "krok" not in st.session_state:
+    st.session_state["krok"] = "vyber_role"
+if "role" not in st.session_state:
+    st.session_state["role"] = None
+if "vybrana_polozka" not in st.session_state:
+    st.session_state["vybrana_polozka"] = None
+if "generovany_rozvrh" not in st.session_state:
+    st.session_state["generovany_rozvrh"] = []
+if "vyplneny_rozvrh" not in st.session_state:
+    st.session_state["vyplneny_rozvrh"] = []
+if "vybrana_predstaveni" not in st.session_state:
+    st.session_state["vybrana_predstaveni"] = []
+if "cas_na_presun" not in st.session_state:
+    st.session_state["cas_na_presun"] = DEFAULT_PAUZA_MINUT
+
+
+def reset_stavu():
+    for key in list(st.session_state.keys()):
+        if key.startswith("toggle_") or key.startswith("locked_"):
+            del st.session_state[key]
+    st.session_state["krok"] = "vyber_role"
+    st.session_state["role"] = None
+    st.session_state["vybrana_polozka"] = None
+    st.session_state["generovany_rozvrh"] = []
+    st.session_state["vyplneny_rozvrh"] = []
+    st.session_state["vybrana_predstaveni"] = []
+    st.session_state["cas_na_presun"] = DEFAULT_PAUZA_MINUT
+
+
+def vykresli_stred():
+    st.write("")
+    st.write("")
+    _, center_col, _ = st.columns([1, 2, 1])
+    return center_col
+
+
+# ==========================================
+# KROK 1: VÝBĚR ROLE
+# ==========================================
+if st.session_state["krok"] == "vyber_role":
+    with vykresli_stred():
+        st.markdown("<h2 style='text-align: center;'>Vyberte svou roli</h2>", unsafe_allow_html=True)
+        st.write("")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button("🎭 Herec", use_container_width=True):
+                st.session_state["role"] = "Herec"
+                st.session_state["krok"] = "vyber_detail"
+                st.rerun()
+
+        with col2:
+            if st.button("⚖️ Porotce", use_container_width=True):
+                st.session_state["role"] = "Porotce"
+                st.session_state["krok"] = "vyber_detail"
+                st.rerun()
+
+        with col3:
+            if st.button("👥 Divák", use_container_width=True):
+                st.session_state["role"] = "Divák"
+                st.session_state["vybrana_polozka"] = None
+                st.session_state["krok"] = "panel"
+                st.rerun()
+
+# ==========================================
+# KROK 2: DETAILNÍ VÝBĚR (Herec / Porotce)
+# ==========================================
+elif st.session_state["krok"] == "vyber_detail":
+    with vykresli_stred():
+        role = st.session_state["role"]
+
+        if role == "Herec":
+            st.markdown("<h2 style='text-align: center;'>V jakém představení hraješ?</h2>", unsafe_allow_html=True)
+            volba = st.selectbox("Vyber své představení:", options=PREDSTAVENI_HEREC)
+
+        elif role == "Porotce":
+            st.markdown("<h2 style='text-align: center;'>Co hodnotíš?</h2>", unsafe_allow_html=True)
+            volba = st.selectbox("Vyber kategorii hodnocení:", options=KATEGORIE_POROTCE)
+
+        col_back, col_next = st.columns(2)
+        with col_back:
+            if st.button("⬅️ Zpět na výběr role", use_container_width=True):
+                reset_stavu()
+                st.rerun()
+        with col_next:
+            if st.button("Potvrdit a vstoupit ➡️", use_container_width=True):
+                st.session_state["vybrana_polozka"] = volba
+                st.session_state["krok"] = "panel"
+                st.rerun()
+
+# ==========================================
+# KROK 3: PANEL
+# ==========================================
+elif st.session_state["krok"] == "panel":
+    role = st.session_state["role"]
+    detail = st.session_state["vybrana_polozka"]
+
+    varovna_lista_placeholder = st.empty()
+
+    top_left, top_right = st.columns([3, 1])
+    with top_left:
+        st.title(f"Panel: {role}")
+        if role == "Herec":
+            st.caption(f"🎭 Hraješ v: **{detail}** (představení je automaticky zamčeno)")
+        elif role == "Porotce":
+            st.caption(f"⚖️ Hodnotíš: **{detail}** (povinná představení jsou zamčena)")
+        elif role == "Divák":
+            st.caption("👥 Výběr je plně na tobě, žádná představení nejsou uzamčena.")
+
+    with top_right:
+        st.write("")
+        if st.button("🔄 Změnit roli", use_container_width=True):
+            reset_stavu()
+            st.rerun()
+
+    st.divider()
+
+    # Vstup času bez pevných omezovačů min/max ve widgetu
+    col_time, _ = st.columns([1, 2])
+    with col_time:
+        cas_mezi_predstavenimi = st.number_input(
+            "Požadovaný čas mezi představeními (v minutách):",
+            value=int(st.session_state.get("cas_na_presun", DEFAULT_PAUZA_MINUT)),
+            step=5,
+            help="Časový prostor potřebný na přesun a odpočinek mezi hrami (povoleno 0 až 1000 min)."
+        )
+
+    # Validace přímo v Python logice
+    cas_je_platny = (
+        cas_mezi_predstavenimi is not None 
+        and 0 <= cas_mezi_predstavenimi <= 1000
+    )
+
+    st.write("### Výběr představení")
+
+    zamknuta_predstaveni: set[str] = set()
+    if role == "Herec" and detail:
+        zamknuta_predstaveni.add(detail)
+    elif role == "Porotce" and detail:
+        zamknuta_predstaveni.update(POVINNA_PREDSTAVENI_POROTCE.get(detail, []))
+
+    cols = st.columns(POCET_SLOUPCU_MRIZKY)
+    vybrana_predstaveni: list[str] = []
+
+    for idx, hra in enumerate(VSECHNA_PREDSTAVENI):
+        col = cols[idx % POCET_SLOUPCU_MRIZKY]
+        with col:
+            je_zamknuto = hra in zamknuta_predstaveni
+
+            if je_zamknuto:
+                st.toggle(
+                    label=f"🔒 **{hra}**",
+                    value=True,
+                    disabled=True,
+                    key=f"locked_{hra}",
+                    help="Toto představení je pro tvou roli povinné."
+                )
+                vybrana_predstaveni.append(hra)
+            else:
+                aktivni = st.toggle(
+                    label=hra,
+                    key=f"toggle_{hra}"
+                )
+                if aktivni:
+                    vybrana_predstaveni.append(hra)
+
+    # Vyhodnocení f1 se spustí jen při validním čase
+    vysledek_f1 = f1(vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
+
+    # Zobrazení varování bez layout shiftu
+    if not cas_je_platny:
+        varovna_lista_placeholder.markdown(
+            """
+            <div style="
+                min-height: 52px; padding: 12px 18px; margin-bottom: 1rem;
+                background-color: rgba(244, 67, 54, 0.16); border: 1px solid rgba(244, 67, 54, 0.45);
+                border-radius: 8px; display: flex; align-items: center; gap: 12px; font-size: 15px; box-sizing: border-box;
+            ">
+                <span style="font-size: 20px; line-height: 1;">❌</span>
+                <span><b>Chyba:</b> Čas na přesun musí být v rozmezí <b>0 až 1000 minut</b>.</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    elif vysledek_f1 is None:
+        varovna_lista_placeholder.markdown(
+            """
+            <div style="
+                min-height: 52px; padding: 12px 18px; margin-bottom: 1rem;
+                background-color: rgba(255, 179, 0, 0.16); border: 1px solid rgba(255, 179, 0, 0.45);
+                border-radius: 8px; display: flex; align-items: center; gap: 12px; font-size: 15px; box-sizing: border-box;
+            ">
+                <span style="font-size: 20px; line-height: 1;">⚠️</span>
+                <span><b>Varování:</b> Všechna tato představení nejde najednou projít. Uprav výběr nebo zkrať čas na přesun.</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        varovna_lista_placeholder.markdown(
+            """
+            <div style="
+                min-height: 52px; padding: 12px 18px; margin-bottom: 1rem;
+                border: 1px solid transparent; border-radius: 8px; visibility: hidden; box-sizing: border-box;
+            ">&nbsp;</div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+
+    # Tlačítko pro generování
+    col_btn_spacer1, col_action, col_btn_spacer2 = st.columns([1, 2, 1])
+    with col_action:
+        # Tlačítko je striktně uzamčeno, pokud je neplatný čas NEBO selhalo f1
+        tlacitko_zakazano = (not cas_je_platny) or (vysledek_f1 is None)
+
+        if not cas_je_platny:
+            napoveda_tlacitka = "Opravte neplatný čas na přesun (musí být 0 až 1000 min)."
+        elif vysledek_f1 is None:
+            napoveda_tlacitka = "Pro vygenerování rozvrhu nejprve vyřešte varování výše."
+        else:
+            napoveda_tlacitka = "Kliknutím sestavíte časový harmonogram."
+
+        if st.button(
+            "📅 Vygenerovat rozvrh",
+            type="primary",
+            use_container_width=True,
+            disabled=tlacitko_zakazano,
+            help=napoveda_tlacitka
+        ):
+            herec_hra = detail if role == "Herec" else None
+            porotce_kat = detail if role == "Porotce" else None
+
+            st.session_state["vybrana_predstaveni"] = vybrana_predstaveni
+            st.session_state["cas_na_presun"] = int(cas_mezi_predstavenimi)
+
+            st.session_state["generovany_rozvrh"] = f2(
+                predstaveni_herce=herec_hra,
+                okruh_hodnoceni_porotcem=porotce_kat,
+                list_toggled_on_predstaveni=vybrana_predstaveni,
+                cas_na_presun=int(cas_mezi_predstavenimi)
+            )
+
+            st.session_state["krok"] = "result"
+            st.rerun()
+
+# ==========================================
+# KROK 4: RESULT (VÝSLEDNÝ ROZVRH)
+# ==========================================
+elif st.session_state["krok"] == "result":
+    role = st.session_state["role"]
+    rozvrh_data = st.session_state["generovany_rozvrh"]
+
+    col_title, col_back = st.columns([3, 1])
+    with col_title:
+        st.title("📋 Výsledný harmonogram")
+        st.caption(f"Role: **{role}** | Celkem vybráno her: **{len(rozvrh_data)}**")
+    with col_back:
+        st.write("")
+        if st.button("⬅️ Zpět na úpravu výběru", use_container_width=True):
+            st.session_state["krok"] = "panel"
+            st.rerun()
+
+    st.divider()
+
+    if not rozvrh_data:
+        st.info("Nebylo vybráno žádné představení k naplánování.")
+    else:
+        df_rozvrh = pd.DataFrame(rozvrh_data)
+        st.dataframe(
+            df_rozvrh,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Představení": st.column_config.TextColumn("Název hry", width="large"),
+                "Místnost": st.column_config.TextColumn("Místnost / Sál", width="medium"),
+                "Čas začátku": st.column_config.TextColumn("Začátek", width="small"),
+                "Čas konce": st.column_config.TextColumn("Konec", width="small"),
+                "Délka": st.column_config.TextColumn("Trvání", width="small"),
+            }
+        )
+
+        # Pouze dvě zarovnaná tlačítka pro stažení PDF / PNG
+        vykresli_tlacitka_exportu(rozvrh_data, prefix_souboru="harmonogram_predstaveni")
+
+    st.divider()
+
+    col_res_sp1, col_res_action, col_res_sp2 = st.columns([1, 2, 1])
+    with col_res_action:
+        if st.button("✍️ Vyplnit rozvrh", type="primary", use_container_width=True):
+            st.session_state["vyplneny_rozvrh"] = f3(
+                prioritni_predstaveni=st.session_state["vybrana_predstaveni"],
+                cas_na_prechod=st.session_state["cas_na_presun"],
+                vsechna_predstaveni=VSECHNA_PREDSTAVENI
+            )
+            st.session_state["krok"] = "result_filled"
+            st.rerun()
+
+# ==========================================
+# KROK 5: RESULT_FILLED (DOPLNĚNÝ ROZVRH)
+# ==========================================
+elif st.session_state["krok"] == "result_filled":
+    role = st.session_state["role"]
+    vyplneny_data = st.session_state["vyplneny_rozvrh"]
+
+    col_title, col_back = st.columns([3, 1])
+    with col_title:
+        st.title("✅ Vyplněný rozvrh")
+        st.caption(f"Role: **{role}** | Celkem položek harmonogramu: **{len(vyplneny_data)}**")
+    with col_back:
+        st.write("")
+        if st.button("⬅️ Zpět na předchozí rozvrh", use_container_width=True):
+            st.session_state["krok"] = "result"
+            st.rerun()
+
+    st.divider()
+
+    if not vyplneny_data:
+        st.info("V rozvrhu nejsou žádná představení.")
+    else:
+        df_vyplneny = pd.DataFrame(vyplneny_data)
+        st.dataframe(
+            df_vyplneny,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Představení": st.column_config.TextColumn("Název programu", width="large"),
+                "Místnost": st.column_config.TextColumn("Místnost / Sál", width="medium"),
+                "Čas začátku": st.column_config.TextColumn("Začátek", width="small"),
+                "Čas konce": st.column_config.TextColumn("Konec", width="small"),
+                "Délka": st.column_config.TextColumn("Trvání", width="small"),
+            }
+        )
+
+        # Pouze dvě zarovnaná tlačítka pro stažení PDF / PNG
+        vykresli_tlacitka_exportu(vyplneny_data, prefix_souboru="vyplneny_rozvrh")
+
+    st.divider()
+
+    col_bottom_sp1, col_bottom_action, col_bottom_sp2 = st.columns([1, 2, 1])
+    with col_bottom_action:
+        if st.button("🔄 Začít od začátku (Nová role)", use_container_width=True):
+            reset_stavu()
+            st.rerun()
