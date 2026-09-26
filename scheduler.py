@@ -39,7 +39,7 @@ class Performance():
         return cls(class_name, start, start + length, bit_id, 1 << bit_id)
 
 
-class SchedulePlanner():
+class ScheduleOptimizerCore():
     @staticmethod
     def load_times_from_file(filepath: Path, cls_length: int = 15) -> dict[str, list[Performance]]:
         all_performances = {}
@@ -59,7 +59,7 @@ class SchedulePlanner():
         return all_performances
 
     @staticmethod
-    def solve_priorities(user_class: str | None, priority_classes: list[str], travel_time: int, data: dict[str, list[Performance]]) -> list[Performance] | None:
+    def solve_priorities(user_class: str | None, referee: str | None, priority_classes: list[str], travel_time: int, data: dict[str, list[Performance]]) -> list[Performance] | None:
         """První fáze řešení. Výroba rozvrhu pouze z prioritních představení."""
         start_skeleton = []
         steps = [0]
@@ -69,6 +69,22 @@ class SchedulePlanner():
         if user_class is not None:
             for perf in data[user_class]:
                 start_skeleton.append(perf)
+
+        if referee is not None:
+            match(referee):
+                case "VG":
+                    for referee_class in ["5AG", "5BG", "6AG", "6BG", "7AG", "7BG"]:
+                        if referee_class not in priority_classes:
+                            priority_classes.append(referee_class)
+                case "NG":
+                    for referee_class in ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG"]:
+                        if referee_class not in priority_classes:
+                            priority_classes.append(referee_class)
+                case "Z":
+                    for referee_class in ["6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]:
+                        if referee_class not in priority_classes:
+                            priority_classes.append(referee_class)
+                
 
         total_priorities = len(priority_classes)
 
@@ -108,7 +124,7 @@ class SchedulePlanner():
                 all_performances.append(perf)
 
         random.shuffle(all_performances)
-        sorted_performances = SchedulePlanner.sort_performances_list(all_performances)
+        sorted_performances = ScheduleOptimizerCore.sort_performances_list(all_performances)
         return sorted_performances
 
     @staticmethod
@@ -117,7 +133,7 @@ class SchedulePlanner():
 
     @staticmethod
     def create_bit_map(tt: int, data: dict[str, list[Performance]]):
-        list_performances = SchedulePlanner.create_sorted_performances_list(data)
+        list_performances = ScheduleOptimizerCore.create_sorted_performances_list(data)
         for performance in list_performances:
             performance.bit_collision = 0
             for other_performance in list_performances:
@@ -137,7 +153,7 @@ class SchedulePlanner():
                     break
             if not_collides:
                 skeleton.append(candidate)
-        return SchedulePlanner.sort_performances_list(skeleton)
+        return ScheduleOptimizerCore.sort_performances_list(skeleton)
 
     @staticmethod
     def find_most_priorities(user_class: str | None, priority_classes: list[str], travel_time: int, data: dict[str, list[Performance]]) -> list[Performance]:
@@ -167,7 +183,7 @@ class SchedulePlanner():
         for perf in start_skeleton:
             start_mask |= perf.bit_collision
 
-        def branch_and_bound(index: int, current_skeleton: list[Performance], current_score: int, current_mask: int):
+        def branch_and_bound(index: int, current_skeleton: list[Performance], current_score: int, current_mask: int): #TODO: Přidat referee
             nonlocal best_score, best_skeleton
 
             if current_score > best_score:
@@ -194,8 +210,31 @@ class SchedulePlanner():
 
         branch_and_bound(0, start_skeleton, 0, start_mask)
         print(f"Nejvíce je možno mít {best_score} z {total_priorities}. Zde je nejlepší rozvrh:")
-        print(SchedulePlanner.sort_performances_list(best_skeleton))
+        print(ScheduleOptimizerCore.sort_performances_list(best_skeleton))
+
+
+
+
+class SchedulePlaner():
+    """Nejvyšší abstrakce"""
+    DEFAULT_CLASS_LENGTH: int = 15
+    DEFAULT_TRAVEL_TIME: int = 5
+    DEFAULT_FILE_PATH: Path = (Path(__file__).parent / "happening_times.txt")
+
+    def __init__(self, file_path: Path = None, class_length: int = DEFAULT_CLASS_LENGTH):
+        self.file_path: Path = file_path
+        self.class_length = class_length
+        self.data = self._set_up()
         
+    def _set_up(self):
+        if not self.file_path.exists():
+            raise FileNotFoundError(f"Konfigurační soubor nenalezen: {self.file_path}")
+        
+        return ScheduleOptimizerCore.load_times_from_file(self.file_path, self.class_length)
+
+    def make_priority_schedule(self, user_class: str | None, referee: str | None, priority_classes: list[str], travel_time: int = DEFAULT_TRAVEL_TIME):
+
+        ScheduleOptimizerCore.solve_priorities(user_class, referee, priority_classes, travel_time, self.data)
 
 
 
@@ -207,7 +246,7 @@ if __name__ == "__main__":
     
     class_length = 15
     
-    data = SchedulePlanner.load_times_from_file(infile, class_length)
+    data = ScheduleOptimizerCore.load_times_from_file(infile, class_length)
     
     user_class = None #"7BG"
     priority_classes = ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG", "5AG", "5BG", "6AG", "6BG", "7AG", "7BG", "6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]
@@ -215,21 +254,21 @@ if __name__ == "__main__":
 
     
         
-    result_priorities = SchedulePlanner.solve_priorities(user_class, priority_classes, travel_time, data)
+    result_priorities = ScheduleOptimizerCore.solve_priorities(user_class, None, priority_classes, travel_time, data)
     #print(result_priorities)
     
 
-    # sorted_performances = SchedulePlanner.create_sorted_performances_list(data)
+    # sorted_performances = ScheduleOptimizerCore.create_sorted_performances_list(data)
     # if result_priorities is not None:
-    #     plan = SchedulePlanner.solve_rest_fill(result_priorities, travel_time, sorted_performances)
+    #     plan = ScheduleOptimizerCore.solve_rest_fill(result_priorities, travel_time, sorted_performances)
     #     # print(plan)
     #     print(f"Délka: {len(plan)}")
 
 
     #start_time_c = time.perf_counter()
-    SchedulePlanner.create_bit_map(travel_time, data)
+    ScheduleOptimizerCore.create_bit_map(travel_time, data)
     
-    SchedulePlanner.find_most_priorities(user_class, priority_classes, travel_time, data)
+    ScheduleOptimizerCore.find_most_priorities(user_class, priority_classes, travel_time, data)
     #end_time_c = time.perf_counter()
     
     #elapsed_ms = (end_time_c - start_time_c) * 1000
