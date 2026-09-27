@@ -6,43 +6,35 @@ matplotlib.use("Agg")  # Bezpečný backend pro Streamlit
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
+from scheduler import SchedulePlaner
 
-st.set_page_config(page_title="Divadelní Aplikace", layout="wide")
+st.set_page_config(page_title="Happening Aplikace", layout="wide")
 
 # --- KONSTANTY A DATA ---
-DEFAULT_PAUZA_MINUT: int = 15
+DEFAULT_PAUZA_MINUT: int = 10
 POCET_SLOUPCU_MRIZKY: int = 4
 
-VSECHNA_PREDSTAVENI: list[str] = [
-    "Hamlet", "Romeo a Julie", "R.U.R.", "Bílá nemoc", "Na samotě u lesa",
-    "Othello", "Macbeth", "Král Lear", "Višňový sad", "Revizor",
-    "Zkrocení zlé ženy", "Cyrano z Bergeracu", "Lakomec", "Pygmalion",
-    "Maryša", "Lucerna", "Fidlovačka", "Radúz a Mahulena",
-    "Kytice", "Noc na Karlštejně", "Dvanáct rozhněvaných mužů", "Čekání na Godota"
-]
+VSECHNA_PREDSTAVENI: list[str] = ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG", "5AG", "5BG", "6AG", "6BG", "7AG", "7BG", "6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]
+
 
 PREDSTAVENI_HEREC: list[str] = VSECHNA_PREDSTAVENI
 
 KATEGORIE_POROTCE: list[str] = [
-    "Nejlepší hlavní herecký výkon",
-    "Nejlepší vedlejší role",
-    "Scénografie a kostýmy",
-    "Režie a celkový dojem",
-    "Dramaturgie",
+    "Vyšší gymnázium", "Nižší gymnázium", "Zakladní škola"
 ]
 
 POVINNA_PREDSTAVENI_POROTCE: dict[str, list[str]] = {
-    "Nejlepší hlavní herecký výkon": ["Hamlet", "Cyrano z Bergeracu", "Maryša", "Macbeth"],
-    "Nejlepší vedlejší role": ["Romeo a Julie", "Revizor", "Radúz a Mahulena"],
-    "Scénografie a kostýmy": ["R.U.R.", "Lucerna", "Noc na Karlštejně", "Kytice"],
-    "Režie a celkový dojem": ["Bílá nemoc", "Višňový sad", "Čekání na Godota", "Dvanáct rozhněvaných mužů"],
-    "Dramaturgie": ["Na samotě u lesa", "Lakomec", "Pygmalion", "Fidlovačka", "Král Lear"],
+    "Vyšší gymnázium": ["5AG", "5BG", "6AG", "6BG", "7AG", "7BG"],
+    "Nižší gymnázium": ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG"],
+    "Základní ěkola": ["6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"],
 }
 
 MISTNOSTI: list[str] = [
     "Hlavní scéna", "Komorní sál", "Divadelní klub", 
     "Sál pod střechou", "Zkušebna A", "Experimentální prostor"
 ]
+
+schedule_planer = SchedulePlaner()
 
 
 # ==========================================
@@ -52,7 +44,7 @@ def vytvor_graficky_rozvrh(rozvrh_data: list[dict], format_souboru: str = "pdf")
     """
     Vygeneruje čistou tabulku rozvrhu jako PDF nebo obrázek (PNG) pomocí Matplotlibu.
     """
-    df = pd.DataFrame(rozvrh_data)
+    df = pd.DataFrame(rozvrh_data).sort_values(by="Čas konce", ascending=True).reset_index(drop=True)
     vyska = max(2.5, len(df) * 0.45 + 1.2)
     fig, ax = plt.subplots(figsize=(10, vyska))
     ax.axis("off")
@@ -121,7 +113,7 @@ def f1(vybrana_predstaveni: list[str], cas_mezi_predstavenimi: int):
     Validace rozvrhu: vrací None, pokud kombinaci nelze stihnout.
     Demo pravidlo: více než 6 představení vyvolá varování.
     """
-    if len(vybrana_predstaveni) > 6:
+    if len(vybrana_predstaveni) > 10:
         return None
     return "OK"
 
@@ -145,8 +137,8 @@ def f2(
             "Představení": hra,
             "Místnost": mistnost,
             "Čas začátku": cas_zacatku.strftime("%H:%M"),
-            "Čas konce": cas_konce.strftime("%H:%M"),
-            "Délka": f"{delka_minut} min"
+            "Čas konce": cas_konce.strftime("%H:%M")
+            #"Délka": f"{delka_minut} min"
         })
 
         aktualni_cas = cas_konce + timedelta(minutes=cas_na_presun)
@@ -341,7 +333,7 @@ elif st.session_state["krok"] == "panel":
                     value=True,
                     disabled=True,
                     key=f"locked_{hra}",
-                    help="Toto představení je pro tvou roli povinné."
+                    help="Toto představení je pro tebe povinné."
                 )
                 vybrana_predstaveni.append(hra)
             else:
@@ -353,7 +345,13 @@ elif st.session_state["krok"] == "panel":
                     vybrana_predstaveni.append(hra)
 
     # Vyhodnocení f1 se spustí jen při validním čase
-    vysledek_f1 = f1(vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
+    #vysledek_f1 = f1(vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
+    if role == "Herec":
+        vysledek_f1 = schedule_planer.check_priority_schedule(detail, None, vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
+    elif role == "Porotce":
+        vysledek_f1 = schedule_planer.check_priority_schedule(None, detail, vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
+    else:
+        vysledek_f1 = schedule_planer.check_priority_schedule(None, None, vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
 
     # Zobrazení varování bez layout shiftu
     if not cas_je_platny:
@@ -423,18 +421,15 @@ elif st.session_state["krok"] == "panel":
             st.session_state["vybrana_predstaveni"] = vybrana_predstaveni
             st.session_state["cas_na_presun"] = int(cas_mezi_predstavenimi)
 
-            st.session_state["generovany_rozvrh"] = f2(
-                predstaveni_herce=herec_hra,
-                okruh_hodnoceni_porotcem=porotce_kat,
-                list_toggled_on_predstaveni=vybrana_predstaveni,
-                cas_na_presun=int(cas_mezi_predstavenimi)
-            )
+            priority_result = schedule_planer.make_priority_schedule(herec_hra, porotce_kat, vybrana_predstaveni, int(cas_mezi_predstavenimi))
+            st.session_state["generovany_rozvrh"] = priority_result[0]
+            st.session_state["list_performances"] = priority_result[1]
 
             st.session_state["krok"] = "result"
             st.rerun()
 
 # ==========================================
-# KROK 4: RESULT (VÝSLEDNÝ ROZVRH)
+# KROK 4: RESULT (PRIORITNÍ ROZVRH)
 # ==========================================
 elif st.session_state["krok"] == "result":
     role = st.session_state["role"]
@@ -442,7 +437,7 @@ elif st.session_state["krok"] == "result":
 
     col_title, col_back = st.columns([3, 1])
     with col_title:
-        st.title("📋 Výsledný harmonogram")
+        st.title("📋 Prioritní harmonogram")
         st.caption(f"Role: **{role}** | Celkem vybráno her: **{len(rozvrh_data)}**")
     with col_back:
         st.write("")
@@ -455,7 +450,7 @@ elif st.session_state["krok"] == "result":
     if not rozvrh_data:
         st.info("Nebylo vybráno žádné představení k naplánování.")
     else:
-        df_rozvrh = pd.DataFrame(rozvrh_data)
+        df_rozvrh = pd.DataFrame(rozvrh_data).sort_values(by="Čas konce", ascending=True).reset_index(drop=True)
         st.dataframe(
             df_rozvrh,
             use_container_width=True,
@@ -477,10 +472,15 @@ elif st.session_state["krok"] == "result":
     col_res_sp1, col_res_action, col_res_sp2 = st.columns([1, 2, 1])
     with col_res_action:
         if st.button("✍️ Vyplnit rozvrh", type="primary", use_container_width=True):
-            st.session_state["vyplneny_rozvrh"] = f3(
-                prioritni_predstaveni=st.session_state["vybrana_predstaveni"],
-                cas_na_prechod=st.session_state["cas_na_presun"],
-                vsechna_predstaveni=VSECHNA_PREDSTAVENI
+            # st.session_state["vyplneny_rozvrh"] = f3(
+            #     prioritni_predstaveni=st.session_state["vybrana_predstaveni"],
+            #     cas_na_prechod=st.session_state["cas_na_presun"],
+            #     vsechna_predstaveni=VSECHNA_PREDSTAVENI
+            # )
+            st.session_state["vyplneny_rozvrh"] = schedule_planer.fill_priority_schedule(
+                st.session_state["list_performances"],
+                st.session_state["cas_na_presun"],
+                VSECHNA_PREDSTAVENI
             )
             st.session_state["krok"] = "result_filled"
             st.rerun()

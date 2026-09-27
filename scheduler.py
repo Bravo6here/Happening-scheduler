@@ -69,18 +69,20 @@ class ScheduleOptimizerCore():
         if user_class is not None:
             for perf in data[user_class]:
                 start_skeleton.append(perf)
+            if user_class in priority_classes:
+                priority_classes.remove(user_class)
 
         if referee is not None:
             match(referee):
-                case "VG":
+                case "Vyšší gymnázium":
                     for referee_class in ["5AG", "5BG", "6AG", "6BG", "7AG", "7BG"]:
                         if referee_class not in priority_classes:
                             priority_classes.append(referee_class)
-                case "NG":
+                case "Nižší gymnázium":
                     for referee_class in ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG"]:
                         if referee_class not in priority_classes:
                             priority_classes.append(referee_class)
-                case "Z":
+                case "Zakladní škola":
                     for referee_class in ["6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]:
                         if referee_class not in priority_classes:
                             priority_classes.append(referee_class)
@@ -221,7 +223,7 @@ class SchedulePlaner():
     DEFAULT_TRAVEL_TIME: int = 5
     DEFAULT_FILE_PATH: Path = (Path(__file__).parent / "happening_times.txt")
 
-    def __init__(self, file_path: Path = None, class_length: int = DEFAULT_CLASS_LENGTH):
+    def __init__(self, file_path: Path = DEFAULT_FILE_PATH, class_length: int = DEFAULT_CLASS_LENGTH):
         self.file_path: Path = file_path
         self.class_length = class_length
         self.data = self._set_up()
@@ -232,10 +234,41 @@ class SchedulePlaner():
         
         return ScheduleOptimizerCore.load_times_from_file(self.file_path, self.class_length)
 
-    def make_priority_schedule(self, user_class: str | None, referee: str | None, priority_classes: list[str], travel_time: int = DEFAULT_TRAVEL_TIME):
+    def check_priority_schedule(self, user_class: str | None, referee: str | None, priority_classes: list[str], travel_time: int = DEFAULT_TRAVEL_TIME) -> bool | None:
 
-        ScheduleOptimizerCore.solve_priorities(user_class, referee, priority_classes, travel_time, self.data)
+        if ScheduleOptimizerCore.solve_priorities(user_class, referee, priority_classes, travel_time, self.data) is None:
+            return None
+        else:
+            return True
 
+    def make_priority_schedule(self, user_class: str | None, referee: str | None, priority_classes: list[str], travel_time: int = DEFAULT_TRAVEL_TIME) -> tuple[list[dict], list[Performance]]:
+        rozvrh: list[dict] = []
+        performance_list = ScheduleOptimizerCore.solve_priorities(user_class, referee, priority_classes, travel_time, self.data)
+        for perf in performance_list:
+            rozvrh.append({
+                            "Představení": perf.class_name, 
+                            "Místnost": "Zatím nevím",
+                            "Čas začátku": f"{perf.start // 60:02d}:{perf.start % 60:02d}",
+                            "Čas konce": f"{perf.end // 60:02d}:{perf.end % 60:02d}"
+                        })
+        return (rozvrh, performance_list)
+
+    def fill_priority_schedule(self, priority_performances: list[Performance], travel_time: int, all_performances: list[str]) -> list[dict]:
+        all_performances_perf = []
+        for a_perf in all_performances:
+            for perf in self.data.get(a_perf, []):
+                all_performances_perf.append(perf)
+
+        rozvrh: list[dict] = []
+        performance_list = ScheduleOptimizerCore.solve_rest_fill(priority_performances, travel_time, ScheduleOptimizerCore.sort_performances_list(all_performances_perf))
+        for perf in performance_list:
+            rozvrh.append({
+                            "Představení": perf.class_name, 
+                            "Místnost": "Zatím nevím",
+                            "Čas začátku": f"{perf.start // 60:02d}:{perf.start % 60:02d}",
+                            "Čas konce": f"{perf.end // 60:02d}:{perf.end % 60:02d}"
+                        })
+        return rozvrh
 
 
 
@@ -249,7 +282,7 @@ if __name__ == "__main__":
     data = ScheduleOptimizerCore.load_times_from_file(infile, class_length)
     
     user_class = None #"7BG"
-    priority_classes = ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG", "5AG", "5BG", "6AG", "6BG", "7AG", "7BG", "6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]
+    priority_classes = ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG", "5AG", "5BG", "6AG", "6BG", "7AG", "7BG"]#, "6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]
     travel_time = 5
 
     
@@ -266,9 +299,9 @@ if __name__ == "__main__":
 
 
     #start_time_c = time.perf_counter()
-    ScheduleOptimizerCore.create_bit_map(travel_time, data)
+    #ScheduleOptimizerCore.create_bit_map(travel_time, data)
     
-    ScheduleOptimizerCore.find_most_priorities(user_class, priority_classes, travel_time, data)
+    #ScheduleOptimizerCore.find_most_priorities(user_class, priority_classes, travel_time, data)
     #end_time_c = time.perf_counter()
     
     #elapsed_ms = (end_time_c - start_time_c) * 1000
