@@ -13,23 +13,41 @@ st.set_page_config(page_title="Happening Aplikace", layout="wide")
 # --- KONSTANTY A DATA ---
 schedule_planer = SchedulePlaner()
 
-DEFAULT_PAUZA_MINUT: int = schedule_planer.DEFAULT_CLASS_LENGTH
+DEFAULT_PAUZA_MINUT: int = schedule_planer.DEFAULT_TRAVEL_TIME
 POCET_SLOUPCU_MRIZKY: int = 4
 
 VSECHNA_PREDSTAVENI: list[str] = schedule_planer.ALL_CLASSES
-
-
 PREDSTAVENI_HEREC: list[str] = VSECHNA_PREDSTAVENI
-
 KATEGORIE_POROTCE: list[str] = schedule_planer.REFEREE_CATEGORIES
-
 POVINNA_PREDSTAVENI_POROTCE: dict[str, list[str]] = schedule_planer.REFEREE_MANDATORY
 
-MISTNOSTI: list[str] = [ # Pouze pro testování
+MISTNOSTI: list[str] = [  # Pouze pro testování
     "Hlavní scéna", "Komorní sál", "Divadelní klub", 
     "Sál pod střechou", "Zkušebna A", "Experimentální prostor"
 ]
 
+# Responzivní CSS pro výběr představení (2 sloupce na mobilu, 4 na desktopu)
+st.markdown(
+    """
+    <style>
+    @media (max-width: 768px) {
+        /* Přepínače představení se na mobilu zobrazí ve 2 sloupcích vedle sebe */
+        [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            gap: 0.5rem 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has([data-testid="stToggle"]) > [data-testid="column"] {
+            min-width: 48% !important;
+            flex: 1 1 48% !important;
+            padding: 0 4px !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # ==========================================
@@ -98,7 +116,6 @@ def vykresli_tlacitka_exportu(rozvrh_data: list[dict], prefix_souboru: str):
             mime="image/png",
             use_container_width=True
         )
-
 
 
 # --- STAV APLIKACE ---
@@ -219,7 +236,7 @@ elif st.session_state["krok"] == "panel":
 
     st.divider()
 
-    # Vstup času bez pevných omezovačů min/max ve widgetu
+    # Vstup času
     col_time, _ = st.columns([1, 2])
     with col_time:
         cas_mezi_predstavenimi = st.number_input(
@@ -229,7 +246,7 @@ elif st.session_state["krok"] == "panel":
             help="Časový prostor potřebný na přesun a odpočinek mezi hrami (povoleno 0 až 1000 min)."
         )
 
-    # Validace přímo v Python logice
+    # Validace
     cas_je_platny = (
         cas_mezi_predstavenimi is not None 
         and 0 <= cas_mezi_predstavenimi <= 1000
@@ -243,30 +260,32 @@ elif st.session_state["krok"] == "panel":
     elif role == "Porotce" and detail:
         zamknuta_predstaveni.update(POVINNA_PREDSTAVENI_POROTCE.get(detail, []))
 
-    cols = st.columns(POCET_SLOUPCU_MRIZKY)
     vybrana_predstaveni: list[str] = []
 
-    for idx, hra in enumerate(VSECHNA_PREDSTAVENI):
-        col = cols[idx % POCET_SLOUPCU_MRIZKY]
-        with col:
-            je_zamknuto = hra in zamknuta_predstaveni
+    # Vykreslení řádek po řádku pro zachování přesného pořadí na mobilu i počítači
+    for i in range(0, len(VSECHNA_PREDSTAVENI), POCET_SLOUPCU_MRIZKY):
+        radek = VSECHNA_PREDSTAVENI[i:i + POCET_SLOUPCU_MRIZKY]
+        cols = st.columns(POCET_SLOUPCU_MRIZKY)
+        for idx, hra in enumerate(radek):
+            with cols[idx]:
+                je_zamknuto = hra in zamknuta_predstaveni
 
-            if je_zamknuto:
-                st.toggle(
-                    label=f"🔒 **{hra}**",
-                    value=True,
-                    disabled=True,
-                    key=f"locked_{hra}",
-                    help="Toto představení je pro tebe povinné."
-                )
-                vybrana_predstaveni.append(hra)
-            else:
-                aktivni = st.toggle(
-                    label=hra,
-                    key=f"toggle_{hra}"
-                )
-                if aktivni:
+                if je_zamknuto:
+                    st.toggle(
+                        label=f"🔒 **{hra}**",
+                        value=True,
+                        disabled=True,
+                        key=f"locked_{hra}",
+                        help="Toto představení je pro tebe povinné."
+                    )
                     vybrana_predstaveni.append(hra)
+                else:
+                    aktivni = st.toggle(
+                        label=hra,
+                        key=f"toggle_{hra}"
+                    )
+                    if aktivni:
+                        vybrana_predstaveni.append(hra)
 
     # Vyhodnocení f1 se spustí jen při validním čase
     if role == "Herec":
@@ -276,7 +295,7 @@ elif st.session_state["krok"] == "panel":
     else:
         vysledek_f1 = schedule_planer.check_priority_schedule(None, None, vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
 
-    # Zobrazení varování bez layout shiftu
+    # Zobrazení varování
     if not cas_je_platny:
         varovna_lista_placeholder.markdown(
             """
@@ -321,7 +340,6 @@ elif st.session_state["krok"] == "panel":
     # Tlačítko pro generování
     col_btn_spacer1, col_action, col_btn_spacer2 = st.columns([1, 2, 1])
     with col_action:
-        # Tlačítko je striktně uzamčeno, pokud je neplatný čas NEBO selhalo f1
         tlacitko_zakazano = (not cas_je_platny) or (vysledek_f1 is None)
 
         if not cas_je_platny:
@@ -387,7 +405,6 @@ elif st.session_state["krok"] == "result":
             }
         )
 
-        # Pouze dvě zarovnaná tlačítka pro stažení PDF / PNG
         vykresli_tlacitka_exportu(rozvrh_data, prefix_souboru="harmonogram_predstaveni")
 
     st.divider()
@@ -439,7 +456,6 @@ elif st.session_state["krok"] == "result_filled":
             }
         )
 
-        # Pouze dvě zarovnaná tlačítka pro stažení PDF / PNG
         vykresli_tlacitka_exportu(vyplneny_data, prefix_souboru="vyplneny_rozvrh")
 
     st.divider()

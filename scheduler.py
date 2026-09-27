@@ -54,7 +54,6 @@ class ScheduleOptimizerCore():
                     cls_perfs.append(Performance.from_raw_time(cls_name, t, cls_length, bit_id))
                     bit_id += 1
                 all_performances[cls_name] = cls_perfs
-                #all_performances[cls_name] = [Performance.from_raw_time(cls_name, t, cls_length, bit_id) for t in parts[1:]]
 
         return all_performances
 
