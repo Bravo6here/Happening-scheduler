@@ -11,30 +11,25 @@ from scheduler import SchedulePlaner
 st.set_page_config(page_title="Happening Aplikace", layout="wide")
 
 # --- KONSTANTY A DATA ---
-DEFAULT_PAUZA_MINUT: int = 10
+schedule_planer = SchedulePlaner()
+
+DEFAULT_PAUZA_MINUT: int = schedule_planer.DEFAULT_CLASS_LENGTH
 POCET_SLOUPCU_MRIZKY: int = 4
 
-VSECHNA_PREDSTAVENI: list[str] = ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG", "5AG", "5BG", "6AG", "6BG", "7AG", "7BG", "6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]
+VSECHNA_PREDSTAVENI: list[str] = schedule_planer.ALL_CLASSES
 
 
 PREDSTAVENI_HEREC: list[str] = VSECHNA_PREDSTAVENI
 
-KATEGORIE_POROTCE: list[str] = [
-    "Vyšší gymnázium", "Nižší gymnázium", "Zakladní škola"
-]
+KATEGORIE_POROTCE: list[str] = schedule_planer.REFEREE_CATEGORIES
 
-POVINNA_PREDSTAVENI_POROTCE: dict[str, list[str]] = {
-    "Vyšší gymnázium": ["5AG", "5BG", "6AG", "6BG", "7AG", "7BG"],
-    "Nižší gymnázium": ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG"],
-    "Základní ěkola": ["6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"],
-}
+POVINNA_PREDSTAVENI_POROTCE: dict[str, list[str]] = schedule_planer.REFEREE_MANDATORY
 
-MISTNOSTI: list[str] = [
+MISTNOSTI: list[str] = [ # Pouze pro testování
     "Hlavní scéna", "Komorní sál", "Divadelní klub", 
     "Sál pod střechou", "Zkušebna A", "Experimentální prostor"
 ]
 
-schedule_planer = SchedulePlaner()
 
 
 # ==========================================

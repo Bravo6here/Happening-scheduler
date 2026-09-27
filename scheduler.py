@@ -222,6 +222,14 @@ class SchedulePlaner():
     DEFAULT_CLASS_LENGTH: int = 15
     DEFAULT_TRAVEL_TIME: int = 5
     DEFAULT_FILE_PATH: Path = (Path(__file__).parent / "happening_times.txt")
+    ALL_CLASSES: list[str] = ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG", "5AG", "5BG", "6AG", "6BG", "7AG", "7BG", "6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"]
+    REFEREE_CATEGORIES: list[str] = ["Vyšší gymnázium", "Nižší gymnázium", "Zakladní škola"]
+    REFEREE_MANDATORY: dict[str, list[str]] = {
+    "Vyšší gymnázium": ["5AG", "5BG", "6AG", "6BG", "7AG", "7BG"],
+    "Nižší gymnázium": ["1AG", "1BG", "2AG", "2BG", "3AG", "3BG", "4AG", "4BG"],
+    "Základní ěkola": ["6AZ", "6BZ", "7AZ", "7BZ", "8AZ", "8BZ", "9AZ", "9BZ"],
+    }
+
 
     def __init__(self, file_path: Path = DEFAULT_FILE_PATH, class_length: int = DEFAULT_CLASS_LENGTH):
         self.file_path: Path = file_path
