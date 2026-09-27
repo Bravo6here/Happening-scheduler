@@ -100,77 +100,6 @@ def vykresli_tlacitka_exportu(rozvrh_data: list[dict], prefix_souboru: str):
         )
 
 
-# ==========================================
-# FUNKCE f1, f2, f3
-# ==========================================
-def f1(vybrana_predstaveni: list[str], cas_mezi_predstavenimi: int):
-    """
-    Validace rozvrhu: vrací None, pokud kombinaci nelze stihnout.
-    Demo pravidlo: více než 6 představení vyvolá varování.
-    """
-    if len(vybrana_predstaveni) > 10:
-        return None
-    return "OK"
-
-
-def f2(
-    predstaveni_herce: str | None,
-    okruh_hodnoceni_porotcem: str | None,
-    list_toggled_on_predstaveni: list[str],
-    cas_na_presun: int
-) -> list[dict]:
-    rozvrh: list[dict] = []
-    aktualni_cas = datetime.strptime("10:00", "%H:%M")
-
-    for hra in list_toggled_on_predstaveni:
-        delka_minut = random.choice([45, 60, 75, 90])
-        cas_zacatku = aktualni_cas
-        cas_konce = cas_zacatku + timedelta(minutes=delka_minut)
-        mistnost = random.choice(MISTNOSTI)
-
-        rozvrh.append({
-            "Představení": hra,
-            "Místnost": mistnost,
-            "Čas začátku": cas_zacatku.strftime("%H:%M"),
-            "Čas konce": cas_konce.strftime("%H:%M")
-            #"Délka": f"{delka_minut} min"
-        })
-
-        aktualni_cas = cas_konce + timedelta(minutes=cas_na_presun)
-
-    return rozvrh
-
-
-def f3(
-    prioritni_predstaveni: list[str],
-    cas_na_prechod: int,
-    vsechna_predstaveni: list[str]
-) -> list[dict]:
-    rozvrh = f2(
-        predstaveni_herce=None,
-        okruh_hodnoceni_porotcem=None,
-        list_toggled_on_predstaveni=prioritni_predstaveni,
-        cas_na_presun=cas_na_prechod
-    )
-
-    if rozvrh:
-        posledni_konec = datetime.strptime(rozvrh[-1]["Čas konce"], "%H:%M")
-        cas_zacatku = posledni_konec + timedelta(minutes=cas_na_prechod)
-    else:
-        cas_zacatku = datetime.strptime("10:00", "%H:%M")
-
-    cas_konce = cas_zacatku + timedelta(minutes=30)
-
-    rozvrh.append({
-        "Představení": "🏛️ Proslov starosty",
-        "Místnost": "Hlavní scéna (Slavnostní sál)",
-        "Čas začátku": cas_zacatku.strftime("%H:%M"),
-        "Čas konce": cas_konce.strftime("%H:%M"),
-        "Délka": "30 min"
-    })
-
-    return rozvrh
-
 
 # --- STAV APLIKACE ---
 if "krok" not in st.session_state:
@@ -340,7 +269,6 @@ elif st.session_state["krok"] == "panel":
                     vybrana_predstaveni.append(hra)
 
     # Vyhodnocení f1 se spustí jen při validním čase
-    #vysledek_f1 = f1(vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
     if role == "Herec":
         vysledek_f1 = schedule_planer.check_priority_schedule(detail, None, vybrana_predstaveni, int(cas_mezi_predstavenimi)) if cas_je_platny else None
     elif role == "Porotce":
@@ -467,11 +395,6 @@ elif st.session_state["krok"] == "result":
     col_res_sp1, col_res_action, col_res_sp2 = st.columns([1, 2, 1])
     with col_res_action:
         if st.button("✍️ Vyplnit rozvrh", type="primary", use_container_width=True):
-            # st.session_state["vyplneny_rozvrh"] = f3(
-            #     prioritni_predstaveni=st.session_state["vybrana_predstaveni"],
-            #     cas_na_prechod=st.session_state["cas_na_presun"],
-            #     vsechna_predstaveni=VSECHNA_PREDSTAVENI
-            # )
             st.session_state["vyplneny_rozvrh"] = schedule_planer.fill_priority_schedule(
                 st.session_state["list_performances"],
                 st.session_state["cas_na_presun"],
